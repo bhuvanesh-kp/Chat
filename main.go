@@ -72,6 +72,7 @@ func main() {
 
 	http.HandleFunc("/", srv.handleWS)
 
+	fmt.Printf("Running http server in port: %v", WSPort)
 	err := http.ListenAndServe(WSPort, nil)
 	if err != nil {
 		log.Fatalf("Error occured in http server: %v", err.Error())
