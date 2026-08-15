@@ -49,11 +49,12 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	
 }
 
 // TODO's
 // [x] Create a HTTP server
-// [] Upgrade it to Web Socket server
+// [x] Upgrade it to Web Socket server
 // [] Add newly connected Web Socker to the server
 // [] Add Web Socket Client
 // [] Remove the connection when the client disconnects the server
