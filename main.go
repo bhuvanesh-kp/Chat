@@ -34,7 +34,14 @@ func NewClient(conn *websocket.Conn) *Client {
 	}
 }
 
-func HandleWS(w http.ResponseWriter, r *http.Request) {
+func NewServer() *Server {
+	return &Server{
+		clients: []*Client{},
+		mu:      new(sync.RWMutex),
+	}
+}
+
+func (srv *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  512,
 		WriteBufferSize: 512,
@@ -49,18 +56,21 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	
+	client := NewClient(conn)
+	srv.clients = append(srv.clients, client)
 }
 
 // TODO's
 // [x] Create a HTTP server
 // [x] Upgrade it to Web Socket server
-// [] Add newly connected Web Socker to the server
+// [x] Add newly connected Web Socker to the server
 // [] Add Web Socket Client
 // [] Remove the connection when the client disconnects the server
 // [] send broadcast message -> with no race condition happeing
 func main() {
-	http.HandleFunc("/", HandleWS)
+	srv := NewServer()
+
+	http.HandleFunc("/", srv.handleWS)
 
 	err := http.ListenAndServe(WSPort, nil)
 	if err != nil {
