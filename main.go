@@ -50,17 +50,21 @@ type Server struct {
 }
 
 type Client struct {
-	Id   string
-	mu   *sync.RWMutex
-	conn *websocket.Conn
+	Id      string
+	mu      *sync.RWMutex
+	conn    *websocket.Conn
+	msgChan chan *RespType
+	done    chan struct{}
 }
 
 func NewClient(conn *websocket.Conn) *Client {
 	Id := rand.Text()[:9]
 	return &Client{
-		Id:   Id,
-		conn: conn,
-		mu:   new(sync.RWMutex),
+		Id:      Id,
+		conn:    conn,
+		mu:      new(sync.RWMutex),
+		msgChan: make(chan *RespType, 64),
+		done:    make(chan struct{}),
 	}
 }
 
@@ -97,12 +101,29 @@ func (srv *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	// srv.clients[client.Id] = client
 	srv.joinServerChan <- client
 
+	go client.writeMsgLoop()
 	go client.readMsgLoop(srv)
+}
+
+func (cl *Client) writeMsgLoop() {
+	defer cl.conn.Close()
+	for {
+		select {
+		case <-cl.done:
+			return
+		case msg := <-cl.msgChan:
+			err := cl.conn.WriteJSON(msg)
+			if err != nil {
+				fmt.Println("Error in broadcasting msg to clientID: ", cl.Id)
+				continue
+			}
+		}
+	}
 }
 
 func (cl *Client) readMsgLoop(srv *Server) {
 	defer func() {
-		cl.conn.Close()
+		close(cl.done)
 		srv.leaveServerChan <- cl
 	}()
 
@@ -131,7 +152,13 @@ func (srv *Server) AcceptLoop() {
 		case c := <-srv.leaveServerChan:
 			srv.leaveServer(c)
 		case msg := <-srv.broadcastChan:
-			go srv.broadcastMsg(msg)
+			cl := map[string]*Client{}
+			for id, c := range srv.clients {
+				if c.Id != msg.Client.Id {
+					cl[id] = c
+				}
+			}
+			go srv.broadcastMsg(msg, cl)
 		}
 	}
 }
@@ -146,24 +173,10 @@ func (srv *Server) leaveServer(client *Client) {
 	fmt.Printf("Client left the server, CId: %s\n", client.Id)
 }
 
-func (srv *Server) broadcastMsg(msg *ReqType) {
-	cl := []*Client{}
-
-	srv.mu.RLock()
-	for _, c := range srv.clients {
-		if c.Id != msg.Client.Id {
-			cl = append(cl, c)
-		}
-	}
-	srv.mu.RUnlock()
-
+func (srv *Server) broadcastMsg(msg *ReqType, cl map[string]*Client) {
 	resp := NewRespType(msg)
 	for _, c := range cl {
-		err := c.conn.WriteJSON(resp)
-		if err != nil {
-			fmt.Println("Error in broadcasting msg to clientID: ", c.Id)
-			continue
-		}
+		c.msgChan <- resp
 	}
 
 	fmt.Println("Broadcast completed")

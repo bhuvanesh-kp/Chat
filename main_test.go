@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sync"
@@ -16,6 +17,37 @@ type TestConfig struct {
 	wg             *sync.WaitGroup
 	broadCstMsgCnt *atomic.Int64
 	targetMsgCnt   int
+}
+
+type TestClient struct {
+	conn    *websocket.Conn
+	msgChan chan *ReqType
+	done    chan struct{}
+	ctx     context.Context
+}
+
+func NewTestClient(conn *websocket.Conn, ctx context.Context) *TestClient {
+	return &TestClient{
+		conn:    conn,
+		msgChan: make(chan *ReqType, 64),
+		done:    make(chan struct{}),
+		ctx:     ctx,
+	}
+}
+
+func (c *TestClient) writeMsgLoop() {
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case msg := <-c.msgChan:
+			err := c.conn.WriteJSON(&msg)
+			if err != nil {
+				fmt.Printf("Error sending msg %v\n", err.Error())
+				return
+			}
+		}
+	}
 }
 
 func DialerServer(tc *TestConfig) *websocket.Conn {
@@ -43,8 +75,6 @@ func DialerServer(tc *TestConfig) *websocket.Conn {
 		tc.wg.Done()
 	}()
 
-	// time.Sleep(2 * time.Second)
-
 	go func() {
 		for {
 			_, b, err := conn.ReadMessage()
@@ -63,9 +93,10 @@ func DialerServer(tc *TestConfig) *websocket.Conn {
 
 func TestConnection(t *testing.T) {
 	go CreateServer()
+	ctx, cancel := context.WithCancel(context.Background())
 	time.Sleep(1 * time.Second)
-	clientCount := 5
-	brCnt := 3
+	clientCount := 50
+	brCnt := 10
 
 	tc := TestConfig{
 		ClientCount:    clientCount,
@@ -76,7 +107,9 @@ func TestConnection(t *testing.T) {
 
 	tc.wg.Add(tc.ClientCount + 1)
 
-	brClient := DialerServer(&tc)
+	brConn := DialerServer(&tc)
+	brClient := NewTestClient(brConn, ctx)
+	go brClient.writeMsgLoop()
 
 	for range tc.ClientCount {
 		go DialerServer(&tc)
@@ -88,16 +121,11 @@ func TestConnection(t *testing.T) {
 			Data:    "hello from test",
 		}
 
-		time.Sleep(100 * time.Millisecond)
-		err := brClient.WriteJSON(&msg)
-		if err != nil {
-			fmt.Printf("Error Sending msg %v\n", err.Error())
-			return
-		}
-
+		brClient.msgChan <- &msg
 	}
 
 	tc.wg.Wait()
+	cancel()
 	time.Sleep(1 * time.Second)
 	fmt.Println("exiting test case")
 }
