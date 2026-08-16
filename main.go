@@ -15,7 +15,7 @@ var (
 )
 
 type Server struct {
-	clients         []*Client
+	clients         map[string]*Client
 	mu              *sync.RWMutex
 	joinServerChan  chan *Client
 	leaveServerChan chan *Client
@@ -38,8 +38,10 @@ func NewClient(conn *websocket.Conn) *Client {
 
 func NewServer() *Server {
 	return &Server{
-		clients: []*Client{},
-		mu:      new(sync.RWMutex),
+		clients:         map[string]*Client{},
+		mu:              new(sync.RWMutex),
+		joinServerChan:  make(chan *Client, 64),
+		leaveServerChan: make(chan *Client, 64),
 	}
 }
 
@@ -61,14 +63,36 @@ func (srv *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	client := NewClient(conn)
 
 	// using srv.mu.Lock and UnLock is good for small number of clients to avoid race condition
-	// if when for a large number of clients are there i will cause perfomace degradation
-	// Thus by go's philosisfy "Dont communicate by sharing memory, share memory by communication" we are using channels to achive the same
-	srv.clients = append(srv.clients, client)
-	fmt.Println(len(srv.clients))
+	// if when for a large number of clients are there it will cause perfomace degradation
+	// Thus by go's philosify "Dont communicate by sharing memory, share memory by communication" we are using channels to achive the same
+	// srv.clients[client.Id] = client
+	srv.joinServerChan <- client
+}
+
+func (srv *Server) AcceptLoop() {
+	for {
+		select {
+		case c := <-srv.joinServerChan:
+			srv.joinServer(c)
+		case c := <-srv.leaveServerChan:
+			srv.leaveServer(c)
+		}
+	}
+}
+
+func (srv *Server) joinServer(client *Client) {
+	srv.clients[client.Id] = client
+	fmt.Printf("Client joining the server, CId: %s\n", client.Id)
+}
+
+func (srv *Server) leaveServer(client *Client) {
+	delete(srv.clients, client.Id)
+	fmt.Printf("Client left the server, CId: %s\n", client.Id)
 }
 
 func CreateServer() {
 	srv := NewServer()
+	go srv.AcceptLoop()
 
 	http.HandleFunc("/", srv.handleWS)
 

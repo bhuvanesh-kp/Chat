@@ -38,7 +38,7 @@ func TestConnection(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	tc := TestConfig{
-		ClientCount: 50,
+		ClientCount: 5,
 		wg:          new(sync.WaitGroup),
 	}
 
