@@ -15,8 +15,10 @@ var (
 )
 
 type Server struct {
-	clients []*Client
-	mu      *sync.RWMutex
+	clients         []*Client
+	mu              *sync.RWMutex
+	joinServerChan  chan *Client
+	leaveServerChan chan *Client
 }
 
 type Client struct {
@@ -57,7 +59,12 @@ func (srv *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := NewClient(conn)
+
+	// using srv.mu.Lock and UnLock is good for small number of clients to avoid race condition
+	// if when for a large number of clients are there i will cause perfomace degradation
+	// Thus by go's philosisfy "Dont communicate by sharing memory, share memory by communication" we are using channels to achive the same
 	srv.clients = append(srv.clients, client)
+	fmt.Println(len(srv.clients))
 }
 
 func CreateServer() {

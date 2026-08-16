@@ -1,6 +1,5 @@
 build-chat:
 	@go build -o ./bin/chat ./...
-	@chmod +x . /bin/chat
 
 chat: build-chat
 	@./bin/chat
