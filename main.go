@@ -60,14 +60,7 @@ func (srv *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	srv.clients = append(srv.clients, client)
 }
 
-// TODO's
-// [x] Create a HTTP server
-// [x] Upgrade it to Web Socket server
-// [x] Add newly connected Web Socker to the server
-// [] Add Web Socket Client
-// [] Remove the connection when the client disconnects the server
-// [] send broadcast message -> with no race condition happeing
-func main() {
+func CreateServer() {
 	srv := NewServer()
 
 	http.HandleFunc("/", srv.handleWS)
@@ -77,4 +70,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error occured in http server: %v\n", err.Error())
 	}
+}
+
+// TODO's
+// [x] Create a HTTP server
+// [x] Upgrade it to Web Socket server
+// [x] Add newly connected Web Socker to the server
+// [] Add Web Socket Client
+// [] Remove the connection when the client disconnects the server
+// [] send broadcast message -> with no race condition happeing
+func main() {
+	CreateServer()
 }
